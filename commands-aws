@@ -1,0 +1,65 @@
+#!/bin/bash 
+
+#Create VPC
+aws ec2 create-vpc --cidr-block 10.0.0.0/16 --region us-east-1
+
+# Create subnet in given VPN , in given AZ, providing subnet CIDR
+aws ec2 create-subnet --vpc-id vpc-f1891e8a --availability-zone us-east-1f --cidr-block 10.130.224.0/27 
+
+# List all subnets in given VPC in certain tag, printing cidr and subnet id
+aws ec2 describe-subnets --filters "Name=tag:Name,Values=*graylog*" --query 'Subnets[].[CidrBlock, SubnetId]' --output text 
+
+# Tag given subnet subnet with certain tag
+aws ec2 create-tags --resources subnet-8d526eb2 --tags Key=Name,Value=graylog-external-3
+
+aws ec2 describe-addresses  --filters "Name=tag:Name,Values=glog-nat" --output text 
+
+# Request ellastic IP for VPC domain. Function prints elastic IP id.
+aws ec2 allocate-address --domain vpc 
+
+# Create NAT gateway, in given subnet and attaching elastic IP to it
+aws ec2 create-nat-gateway --subnet-id subnet-e0ff2eaa --allocation-id eipalloc-d2b221db 
+
+# List all subnets in given VPC, printing name tag in the same line as a text.
+aws ec2 describe-subnets --filters "Name=vpc-id,Values=vpc-f1891e8a" --query 'Subnets[].[AvailabilityZone, AvailableIpAddressCount, SubnetId, Tags[?Key==`Name`].Value | [0]]' --output text 
+
+# List all instances with certain tag , output as State  InstanceId First Network Interface addres as text
+aws ec2 describe-instances --filters "Name=tag:Role,Values=*elasticsearch*" --query 'Reservations[*].[Instances[*].[State.Name, InstanceId,NetworkInterfaces[0].PrivateIpAddress]]' --output text
+
+# List instances certain tag and show its name and ip addresses
+aws ec2 describe-instances --filters "Name=tag:Role,Values=*graylog*" --query 'Reservations[*].[Instances[*].[InstanceId, PrivateIpAddress, PublicIpAddres, Tags[?Key==`Name`].Value | [0]]]' --output text 
+
+# start all instances with certain tags
+aws ec2 describe-instances --filters "Name=tag:Role,Values=elasticsearch" --region us-east-1 \
+--query 'Reservations[*].[Instances[*].[State.Name, InstanceId,NetworkInterfaces[0].PrivateIpAddress]]' \
+--output text | grep stopped | awk '{print $2}' | \
+while read line; do aws ec2 start-instances --instance-ids ${line} --region us-east-1; done
+
+# List instances of Environment stage tag, showing only running ones
+aws ec2 describe-instances --filters "Name=tag:Environment,Values=stage" --region us-east-1 
+--query 'Reservations[*].[Instances[*].[State.Name, InstanceId, InstanceType, NetworkInterfaces[0].PrivateIpAddress, PublicIpAddress]]' \
+--output text | grep running
+
+# List all subnets in given VPC, printing its AZ, Available adresseses and CIDR block as text
+aws ec2 describe-subnets --filters "Name=vpc-id,Values=vpc-f1891e8a" --query 'Subnets[*].[AvailabilityZone, AvailableIpAddressCount, CidrBlock]' --output text 
+
+# List all instances with tag Role:graylog, printing its state and instance Id.
+aws ec2 describe-instances --filters "Name=tag:Role,Values=graylog" --query 'Reservations[].[Instances[].[State.Name,InstanceId]]' --output text | awk '{print $2}'
+
+#List all security groups by its name and id in certain VPC
+aws ec2 describe-security-groups --filters Name=vpc-id,Values=vpc-e8b2288e --query 'SecurityGroups[*].{Name:GroupName,ID:GroupId}' --output text
+
+#Create security group
+aws ec2 create-security-group --description 'Elasticsearch cluster rules' --group-name 'es-glog' --vpc-id vpc-f1891e8a 
+
+# Configure inbound rules for security group: Allow all traffic from members of specific security group (itself)
+aws ec2 authorize-security-group-ingress --group-name es-glog --protocol all --port all --source-group sg-d66e3ba0 
+
+#Confiure inbound rules for security group: Allow all traffic from the specifig range
+aws ec2 authorize-security-group-ingress --group-id sg-0803567e --protocol all --port all --cidr 172.31.12.2/28 
+
+# Update inbound rules for security group
+aws ec2 update-security-group-rule-descriptions-ingress --group-id sg-0bbe4377 --ip-permissions '[{"IpProtocol": "all", "IpRanges": [{"CidrIp": "172.31.0.0/16", "Description": "All between es nodes"}]}]'
+
+#Add machine to security groups
+aws ec2 modify-instance-attribute --instance-id i-02a3ed6344227339b  --groups  sg-d66e3ba0 sg-729c7507 sg-953556e6 sg-8786eafa

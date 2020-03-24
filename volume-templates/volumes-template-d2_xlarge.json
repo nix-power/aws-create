@@ -1,0 +1,22 @@
+[
+  {
+    "DeviceName": "/dev/sda1",
+    "Ebs": {
+      "DeleteOnTermination" : true,
+      "VolumeSize": 60,
+       "VolumeType": "gp2"
+    }
+  },
+  {
+    "DeviceName": "/dev/sdb",
+    "VirtualName": "ephemeral0"
+  },
+  {
+    "DeviceName": "/dev/sdc",
+    "VirtualName": "ephemeral1"
+  },
+  {
+    "DeviceName": "/dev/sdd",
+    "VirtualName": "ephemeral2"
+  }
+]
